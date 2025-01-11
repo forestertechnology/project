@@ -1,0 +1,343 @@
+import React, { useState, useEffect } from 'react';
+import { QrCode, Check } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
+
+interface SubscriptionTier {
+  id: string;
+  name: string;
+  max_menu_items: number;
+  max_item_images: number;
+  max_menus: number;
+  max_categories: number;
+  custom_qr_codes: boolean;
+  special_offers: boolean;
+}
+
+export default function SignUp() {
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [mobileNumber, setMobileNumber] = useState('');
+  const [selectedPlan, setSelectedPlan] = useState('');
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [subscriptionTiers, setSubscriptionTiers] = useState<SubscriptionTier[]>([]);
+  const navigate = useNavigate();
+  const { signUp } = useAuth();
+
+  useEffect(() => {
+    async function fetchSubscriptionTiers() {
+      try {
+        const { data, error } = await supabase
+          .from('subscription_tiers')
+          .select('*')
+          .order('max_menu_items');
+
+        if (error) {
+          console.error('Error fetching subscription tiers:', error);
+          setError('Failed to load subscription plans. Please try again.');
+          return;
+        }
+
+        if (data) {
+          setSubscriptionTiers(data);
+          // Set the first plan (Free) as default
+          if (data.length > 0) {
+            setSelectedPlan(data[0].id);
+          }
+        }
+      } catch (err) {
+        console.error('Error:', err);
+        setError('Failed to load subscription plans. Please try again.');
+      }
+    }
+
+    fetchSubscriptionTiers();
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setIsLoading(true);
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      setIsLoading(false);
+      return;
+    }
+
+    if (!selectedPlan) {
+      setError('Please select a subscription plan');
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      await signUp(email, password, {
+        first_name: firstName,
+        last_name: lastName,
+        subscription_tier_id: selectedPlan,
+        is_admin: false,
+      });
+      navigate('/dashboard');
+    } catch (err) {
+      setError('Failed to create account. Please try again.');
+      console.error('Signup error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+      <div className="sm:mx-auto sm:w-full sm:max-w-md">
+        <button 
+          onClick={() => navigate('/')} 
+          className="mx-auto flex items-center justify-center space-x-2 hover:opacity-80 transition-opacity"
+        >
+          <QrCode className="w-10 h-10 text-orange-500" />
+          <span className="text-3xl font-bold text-gray-900">QRMenu</span>
+        </button>
+        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+          Create your account
+        </h2>
+        <p className="mt-2 text-center text-sm text-gray-600">
+          Already have an account?{' '}
+          <button
+            onClick={() => navigate('/login')}
+            className="font-medium text-orange-600 hover:text-orange-500"
+          >
+            Sign in
+          </button>
+        </p>
+      </div>
+
+      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-2xl">
+        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+          {error && (
+            <div className="mb-4 bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg">
+              {error}
+            </div>
+          )}
+
+          <form className="space-y-8" onSubmit={handleSubmit}>
+            {/* Personal Information */}
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">
+                    First name
+                  </label>
+                  <div className="mt-1">
+                    <input
+                      id="firstName"
+                      name="firstName"
+                      type="text"
+                      required
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-orange-500 focus:border-orange-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">
+                    Last name
+                  </label>
+                  <div className="mt-1">
+                    <input
+                      id="lastName"
+                      name="lastName"
+                      type="text"
+                      required
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-orange-500 focus:border-orange-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="mobile" className="block text-sm font-medium text-gray-700">
+                  Mobile number
+                </label>
+                <div className="mt-1">
+                  <input
+                    id="mobile"
+                    name="mobile"
+                    type="tel"
+                    value={mobileNumber}
+                    onChange={(e) => setMobileNumber(e.target.value)}
+                    className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-orange-500 focus:border-orange-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                  Email address
+                </label>
+                <div className="mt-1">
+                  <input
+                    id="email"
+                    name="email"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-orange-500 focus:border-orange-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                  Password
+                </label>
+                <div className="mt-1">
+                  <input
+                    id="password"
+                    name="password"
+                    type="password"
+                    autoComplete="new-password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-orange-500 focus:border-orange-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-700">
+                  Confirm password
+                </label>
+                <div className="mt-1">
+                  <input
+                    id="confirm-password"
+                    name="confirm-password"
+                    type="password"
+                    autoComplete="new-password"
+                    required
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-orange-500 focus:border-orange-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Plan Selection */}
+            <div className="space-y-4 pt-6 border-t border-gray-200">
+              <h3 className="text-lg font-medium text-gray-900">
+                Select your plan
+              </h3>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {subscriptionTiers.map((tier) => (
+                  <div
+                    key={tier.id}
+                    onClick={() => setSelectedPlan(tier.id)}
+                    className={`relative rounded-lg border-2 p-6 cursor-pointer transition-all ${
+                      selectedPlan === tier.id
+                        ? 'border-orange-500 bg-orange-50'
+                        : 'border-gray-300 hover:border-orange-300'
+                    }`}
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900 capitalize">{tier.name}</h3>
+                        <p className="mt-2 text-2xl font-bold text-gray-900">
+                          {tier.name.toLowerCase() === 'free' ? 'Free' : '$9.97/month'}
+                        </p>
+                      </div>
+                      <div
+                        className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                          selectedPlan === tier.id
+                            ? 'border-orange-500 bg-orange-500'
+                            : 'border-gray-300'
+                        }`}
+                      >
+                        {selectedPlan === tier.id && (
+                          <Check className="w-3 h-3 text-white" />
+                        )}
+                      </div>
+                    </div>
+                    <ul className="mt-6 space-y-3">
+                      <li className="flex items-center text-sm text-gray-600">
+                        <Check className="w-4 h-4 text-orange-500 mr-2 flex-shrink-0" />
+                        {tier.max_menu_items} Menu Items
+                      </li>
+                      <li className="flex items-center text-sm text-gray-600">
+                        <Check className="w-4 h-4 text-orange-500 mr-2 flex-shrink-0" />
+                        {tier.max_item_images} Item Images
+                      </li>
+                      <li className="flex items-center text-sm text-gray-600">
+                        <Check className="w-4 h-4 text-orange-500 mr-2 flex-shrink-0" />
+                        {tier.max_menus} {tier.max_menus === 1 ? 'Menu' : 'Menus'}
+                      </li>
+                      <li className="flex items-center text-sm text-gray-600">
+                        <Check className="w-4 h-4 text-orange-500 mr-2 flex-shrink-0" />
+                        {tier.max_categories} Menu Categories
+                      </li>
+                      {tier.custom_qr_codes && (
+                        <li className="flex items-center text-sm text-gray-600">
+                          <Check className="w-4 h-4 text-orange-500 mr-2 flex-shrink-0" />
+                          Custom QR Codes
+                        </li>
+                      )}
+                      {tier.special_offers && (
+                        <li className="flex items-center text-sm text-gray-600">
+                          <Check className="w-4 h-4 text-orange-500 mr-2 flex-shrink-0" />
+                          Special Offers
+                        </li>
+                      )}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              <div className="flex items-center">
+                <input
+                  id="terms"
+                  name="terms"
+                  type="checkbox"
+                  required
+                  className="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded"
+                />
+                <label htmlFor="terms" className="ml-2 block text-sm text-gray-900">
+                  I agree to the{' '}
+                  <a href="#" className="font-medium text-orange-600 hover:text-orange-500">
+                    Terms of Service
+                  </a>{' '}
+                  and{' '}
+                  <a href="#" className="font-medium text-orange-600 hover:text-orange-500">
+                    Privacy Policy
+                  </a>
+                </label>
+              </div>
+
+              <div>
+                <button
+                  type="submit"
+                  disabled={isLoading || !selectedPlan}
+                  className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isLoading ? 'Creating account...' : 'Create account'}
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
