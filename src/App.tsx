@@ -7,6 +7,7 @@ import CreateMenu from './pages/CreateMenu';
 import HomePage from './pages/HomePage';
 import AuthCallback from './pages/auth/callback';
 import ProtectedRoute from './components/ProtectedRoute';
+import RestaurantSetup from './components/RestaurantSetup';
 
 export default function App() {
   return (
@@ -23,6 +24,11 @@ export default function App() {
       <Route path="/create-menu" element={
         <ProtectedRoute>
           <CreateMenu />
+        </ProtectedRoute>
+      } />
+      <Route path="/setup" element={
+        <ProtectedRoute>
+          <RestaurantSetup />
         </ProtectedRoute>
       } />
     </Routes>

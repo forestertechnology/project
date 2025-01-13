@@ -39,35 +39,37 @@ export default function HomePage() {
 
   const fetchSubscriptionTiers = async () => {
     try {
+      console.log('Fetching subscription tiers...');
       const { data, error } = await supabase
         .from('subscription_tiers')
         .select('*')
         .order('name');
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
+      
       if (data) {
+        console.log('Received subscription tiers:', data);
         setSubscriptionTiers(data);
+      } else {
+        console.log('No subscription tiers data received');
       }
     } catch (error) {
       console.error('Error fetching subscription tiers:', error);
     }
   };
 
+  useEffect(() => {
+    console.log('Current subscription tiers state:', subscriptionTiers);
+  }, [subscriptionTiers]);
+
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const features = [
-    {
-      icon: Utensils,
-      title: "Digital Menu Creation",
-      description: "Create and customize your digital menu with an easy-to-use interface"
-    },
-    {
-      icon: QrCode,
-      title: "QR Code Generation",
-      description: "Generate unique QR codes for each menu that customers can scan"
-    },
     {
       icon: Smartphone,
       title: "Mobile-First Design",
@@ -109,15 +111,15 @@ export default function HomePage() {
       description: "Include an image on the left of your Menu Item"
     },
     {
-      icon: FolderTree,
-      title: "Categories",
-      description: "Organize your menu items into customizable categories for better navigation"
+      icon: Utensils,
+      title: "Digital Menu Creation",
+      description: "Create and customize your digital menu with an easy-to-use interface"
     },
     {
-      icon: Bell,
-      title: "Special Items",
-      description: "Highlight special menu items and promotions to attract customers"
-    }
+      icon: QrCode,
+      title: "QR Code Generation",
+      description: "Generate unique QR codes for each menu that customers can scan"
+    },
   ];
 
   const howItWorks = [
@@ -170,12 +172,15 @@ export default function HomePage() {
   };
 
   const formatPrice = (tier: SubscriptionTier) => {
+    console.log('Formatting price for tier:', tier);
+
     if (tier.name.toLowerCase() === 'free') {
+      console.log('Free tier, returning "Free"');
       return 'Free';
     }
 
-    // Handle case where pricing data isn't available yet
     if (!tier.regular_price) {
+      console.log('No regular price available, using fallback price');
       return (
         <span>
           $19.97
@@ -185,6 +190,11 @@ export default function HomePage() {
     }
 
     if (tier.discounted_price) {
+      console.log('Tier has discount:', {
+        regular: tier.regular_price,
+        discounted: tier.discounted_price,
+        percentage: tier.discount_percentage
+      });
       return (
         <div>
           <span className="text-2xl font-bold">${tier.discounted_price.toFixed(2)}</span>
@@ -197,6 +207,7 @@ export default function HomePage() {
       );
     }
 
+    console.log('Using regular price:', tier.regular_price);
     return (
       <span>
         ${tier.regular_price.toFixed(2)}

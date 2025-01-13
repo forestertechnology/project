@@ -82,6 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function signIn(email: string, password: string) {
     try {
+      console.log('Attempting to sign in with email:', email);
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -90,10 +91,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) throw error;
       if (!data.user) throw new Error('No user returned from sign in');
 
+      console.log('Sign in successful, user:', data.user);
       setUser(data.user);
+      
+      console.log('Fetching user profile...');
       const profile = await fetchProfile(data.user.id);
       if (!profile) throw new Error('No profile found');
+      
+      console.log('Profile fetched successfully:', profile);
     } catch (error) {
+      console.error('Sign in error:', error);
       setUser(null);
       setProfile(null);
       throw error;

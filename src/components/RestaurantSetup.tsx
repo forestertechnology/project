@@ -30,9 +30,13 @@ export default function RestaurantSetup() {
 
       if (insertError) throw insertError;
       window.location.reload();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error creating restaurant:', err);
-      setError('Failed to create restaurant. Please try again.');
+      if (err.code === 'check_violation') {
+        setError('You have reached the maximum number of restaurants for your subscription plan. Please upgrade your plan to add more restaurants.');
+      } else {
+        setError('Failed to create restaurant. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }

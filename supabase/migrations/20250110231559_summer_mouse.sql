@@ -20,9 +20,18 @@ ADD COLUMN IF NOT EXISTS discount_percentage integer,
 ADD COLUMN IF NOT EXISTS discount_ends_at timestamptz;
 
 -- Add constraint to ensure discount percentage is between 0 and 100
-ALTER TABLE subscription_tiers
-ADD CONSTRAINT valid_discount_percentage 
-CHECK (discount_percentage IS NULL OR (discount_percentage >= 0 AND discount_percentage <= 100));
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 
+        FROM pg_constraint 
+        WHERE conname = 'valid_discount_percentage'
+    ) THEN
+        ALTER TABLE subscription_tiers
+        ADD CONSTRAINT valid_discount_percentage
+        CHECK (discount_percentage IS NULL OR (discount_percentage >= 0 AND discount_percentage <= 100));
+    END IF;
+END $$;
 
 -- Update existing tiers with pricing
 UPDATE subscription_tiers

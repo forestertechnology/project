@@ -5,10 +5,7 @@ ADD COLUMN IF NOT EXISTS discounted_price numeric(10,2),
 ADD COLUMN IF NOT EXISTS discount_percentage integer,
 ADD COLUMN IF NOT EXISTS discount_ends_at timestamptz;
 
--- Add constraint to ensure discount percentage is between 0 and 100
-ALTER TABLE subscription_tiers
-ADD CONSTRAINT valid_discount_percentage 
-CHECK (discount_percentage IS NULL OR (discount_percentage >= 0 AND discount_percentage <= 100));
+-- Constraint handled in earlier migration (20250110231559_summer_mouse.sql)
 
 -- Update existing tiers with pricing
 UPDATE subscription_tiers
@@ -27,22 +24,4 @@ SET
   discount_ends_at = NOW() + INTERVAL '30 days'
 WHERE name = 'Advanced';
 
--- Add policy for admin pricing management
-CREATE POLICY "Only admins can update subscription pricing"
-  ON subscription_tiers
-  FOR UPDATE
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM user_profiles
-      WHERE user_profiles.id = auth.uid()
-      AND user_profiles.is_admin = true
-    )
-  )
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM user_profiles
-      WHERE user_profiles.id = auth.uid()
-      AND user_profiles.is_admin = true
-    )
-  );
+-- Policy already exists in earlier migration (20250110231559_summer_mouse.sql)

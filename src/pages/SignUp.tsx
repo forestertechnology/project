@@ -13,6 +13,10 @@ interface SubscriptionTier {
   max_categories: number;
   custom_qr_codes: boolean;
   special_offers: boolean;
+  regular_price: number;
+  discounted_price: number | null;
+  discount_percentage: number | null;
+  discount_ends_at: string | null;
 }
 
 export default function SignUp() {
@@ -185,7 +189,12 @@ export default function SignUp() {
                 Didn't receive the email?{' '}
                 <button
                   type="button"
-                  onClick={handleSubmit}
+                  onClick={() => {
+                    setError('');
+                    setIsLoading(true);
+                    handleSubmit(new Event('submit') as unknown as React.FormEvent<HTMLFormElement>)
+                      .finally(() => setIsLoading(false));
+                  }}
                   className="text-orange-600 hover:text-orange-500 font-medium"
                 >
                   Resend verification email
@@ -334,7 +343,12 @@ export default function SignUp() {
                               'Free'
                             ) : (
                               <span>
-                                $9.97
+                                ${tier.discounted_price || tier.regular_price}
+                                {tier.discounted_price && (
+                                  <span className="ml-2 text-base font-normal text-gray-500 line-through">
+                                    ${tier.regular_price}
+                                  </span>
+                                )}
                                 <span className="text-base font-normal text-gray-500">/month</span>
                               </span>
                             )}
