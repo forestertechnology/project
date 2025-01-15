@@ -1,15 +1,47 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Building, MapPin } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { useSubscription } from '../hooks/useSubscription';
 
-export default function RestaurantSetup() {
+interface RestaurantSetupProps {
+  onRestaurantCreated?: () => void;
+}
+
+export default function RestaurantSetup({ onRestaurantCreated }: RestaurantSetupProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const { profile } = useAuth();
+  const { tier, isLoading: isLoadingTier, canAddRestaurant } = useSubscription();
+  const [restaurantCount, setRestaurantCount] = useState(0);
+  const [isLoadingCount, setIsLoadingCount] = useState(true);
+
+  useEffect(() => {
+    async function fetchRestaurantCount() {
+      if (!profile) return;
+      
+      try {
+        const { count, error } = await supabase
+          .from('restaurants')
+          .select('*', { count: 'exact', head: true })
+          .eq('owner_id', profile.id);
+
+        if (error) throw error;
+        setRestaurantCount(count || 0);
+      } catch (err) {
+        console.error('Error fetching restaurant count:', err);
+      } finally {
+        setIsLoadingCount(false);
+      }
+    }
+
+    fetchRestaurantCount();
+  }, [profile]);
+
+  const canCreate = canAddRestaurant(restaurantCount);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,7 +61,9 @@ export default function RestaurantSetup() {
         ]);
 
       if (insertError) throw insertError;
-      window.location.reload();
+      if (onRestaurantCreated) {
+        onRestaurantCreated();
+      }
     } catch (err: any) {
       console.error('Error creating restaurant:', err);
       if (err.code === 'check_violation') {
@@ -105,9 +139,16 @@ export default function RestaurantSetup() {
             </div>
           </div>
 
+          {!isLoadingCount && !canCreate && (
+            <div className="mb-6 bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg">
+              You have reached the maximum number of restaurants ({tier?.max_restaurants}) for your subscription tier. 
+              Please upgrade your plan to add more restaurants.
+            </div>
+          )}
+
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isLoading || !canCreate || isLoadingCount}
             className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isLoading ? 'Creating...' : 'Create Restaurant'}

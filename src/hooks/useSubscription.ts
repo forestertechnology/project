@@ -10,6 +10,7 @@ interface SubscriptionTier {
   max_categories: number;
   max_backgrounds: number;
   max_custom_links: number;
+  max_restaurants: number;
   custom_qr_codes: boolean;
   special_offers: boolean;
   regular_price: number;
@@ -28,82 +29,99 @@ export function useSubscription() {
 
   useEffect(() => {
     let isMounted = true;
-    let timeoutId: NodeJS.Timeout;
+    let timeoutId: NodeJS.Timeout | null = null;
 
     async function fetchSubscriptionTier() {
+      // Prevent multiple concurrent fetches
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+
+      // Skip if still loading profile or no profile exists
+      if (isLoadingProfile || !profile) {
+        if (isMounted) {
+          setTier(null);
+          setIsLoading(false);
+        }
+        return;
+      }
+
       try {
-        // Don't fetch if profile is still loading
-        if (isLoadingProfile) {
-          return;
-        }
-
-        // If no profile exists, set to null and return
-        if (!profile) {
-          if (isMounted) {
-            setTier(null);
-            setIsLoading(false);
-          }
-          return;
-        }
-
         setIsLoading(true);
         setError(null);
 
-        // Clear any pending retry timeout
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-        }
-
-        // Try to fetch the tier
-        const { data: tierData, error: tierError } = await supabase
+        // Fetch default Free tier if no specific tier is assigned
+        const tierId = profile.subscription_tier_id || 'free';
+        
+        // First try to get the specific tier
+        let { data: tierData, error: tierError } = await supabase
           .from('subscription_tiers')
-          .select('*')
-          .or(`id.eq.${profile.subscription_tier_id},name.eq.Free`)
-          .order('id', { ascending: true })
-          .limit(1)
+          .select()
+          .eq('id', tierId)
           .single();
 
+        // If not found, try to get the Free tier
         if (tierError) {
-          throw tierError;
+          const freeResult = await supabase
+            .from('subscription_tiers')
+            .select()
+            .ilike('name', 'free')
+            .single();
+            
+          tierData = freeResult.data;
+          tierError = freeResult.error;
         }
 
-        if (isMounted) {
+        if (tierError) {
+          // Fallback to default Free tier if fetch fails
+          const defaultFreeTier = {
+            id: 'free',
+            name: 'Free',
+            max_menu_items: 10,
+            max_menus: 1,
+            max_categories: 3,
+            max_backgrounds: 1,
+            max_custom_links: 0,
+            max_restaurants: 1,
+            custom_qr_codes: false,
+            special_offers: false,
+            regular_price: 0,
+            discounted_price: null,
+            discount_percentage: null,
+            discount_ends_at: null
+          };
+
+          if (isMounted) {
+            setTier(defaultFreeTier);
+            setError('Could not fetch subscription tier. Using default Free tier.');
+          }
+        } else if (isMounted) {
           setTier(tierData);
-          setIsLoading(false);
-          setRetryCount(0); // Reset retry count on success
         }
       } catch (err) {
-        console.error('Error fetching subscription tier:', err);
+        console.error('Unexpected error in subscription tier fetch:', err);
         if (isMounted) {
-          setError(err instanceof Error ? err.message : 'Failed to fetch subscription tier');
+          setError(err instanceof Error ? err.message : 'Unexpected error fetching subscription tier');
+        }
+      } finally {
+        if (isMounted) {
           setIsLoading(false);
-          
-          // Retry with exponential backoff
-          if (retryCount < maxRetries) {
-            const delay = Math.min(1000 * Math.pow(2, retryCount), 30000); // Max 30s delay
-            console.log(`Retrying subscription fetch in ${delay}ms (attempt ${retryCount + 1})`);
-            timeoutId = setTimeout(() => {
-              setRetryCount(prev => prev + 1);
-              fetchSubscriptionTier();
-            }, delay);
-          }
         }
       }
     }
 
-    // Fetch immediately if we have a profile and not loading
-    if (profile && !isLoadingProfile) {
+    // Trigger fetch when profile changes or loading completes
+    if (!isLoadingProfile) {
       fetchSubscriptionTier();
-    } else if (!profile && !isLoadingProfile) {
-      // If profile loading is done but no profile exists
-      setTier(null);
-      setIsLoading(false);
     }
 
     return () => {
       isMounted = false;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
     };
-  }, [profile, profile?.subscription_tier_id, isLoadingProfile]);
+  }, [profile, isLoadingProfile]);
 
   return { 
     tier, 
@@ -114,5 +132,6 @@ export function useSubscription() {
     canAddMenu: (currentCount: number) => tier ? currentCount < tier.max_menus : false,
     canAddMenuItem: (currentCount: number) => tier ? currentCount < tier.max_menu_items : false,
     canAddCategory: (currentCount: number) => tier ? currentCount < tier.max_categories : false,
+    canAddRestaurant: (currentCount: number) => tier ? currentCount < tier.max_restaurants : false,
   };
 }

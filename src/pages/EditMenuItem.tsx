@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../lib/supabase";
 import { AlertCircle, ArrowLeft, Plus, X } from "lucide-react";
@@ -9,10 +9,20 @@ interface Category {
   name: string;
 }
 
-export default function CreateMenu() {
+interface MenuItem {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  category: string;
+  image_url: string | null;
+  restaurant_id: string;
+}
+
+export default function EditMenuItem() {
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { profile } = useAuth();
-  const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -26,40 +36,52 @@ export default function CreateMenu() {
     price: "",
     image: null as File | null,
     imagePreview: null as string | null,
+    currentImageUrl: null as string | null
   });
 
   useEffect(() => {
-    if (profile?.id) {
-      fetchRestaurantAndCategories();
+    if (profile?.id && id) {
+      fetchMenuItemAndCategories();
     }
-  }, [profile?.id]);
+  }, [profile?.id, id]);
 
-  const fetchRestaurantAndCategories = async () => {
+  const fetchMenuItemAndCategories = async () => {
     try {
-      // Get restaurant ID
-      const { data: restaurant, error: restaurantError } = await supabase
-        .from("restaurants")
-        .select("id")
-        .eq("owner_id", profile?.id)
+      setIsLoading(true);
+
+      // Fetch menu item
+      const { data: itemData, error: itemError } = await supabase
+        .from("menu_items")
+        .select("*")
+        .eq("id", id)
         .single();
 
-      if (restaurantError) throw restaurantError;
-      
-      if (restaurant) {
-        setRestaurantId(restaurant.id);
-        
-        // Fetch categories
+      if (itemError) throw itemError;
+
+      if (itemData) {
+        // Fetch categories for the restaurant
         const { data: categoriesData, error: categoriesError } = await supabase
           .from("menu_categories")
           .select("*")
-          .eq("restaurant_id", restaurant.id);
+          .eq("restaurant_id", itemData.restaurant_id);
 
         if (categoriesError) throw categoriesError;
-        
+
         setCategories(categoriesData || []);
+        setSelectedCategory(itemData.category);
+        setMenuItem({
+          name: itemData.name,
+          description: itemData.description || "",
+          price: itemData.price.toString(),
+          image: null,
+          imagePreview: null,
+          currentImageUrl: itemData.image_url
+        });
       }
     } catch (error: any) {
       setError(error.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -75,15 +97,23 @@ export default function CreateMenu() {
   };
 
   const handleCreateCategory = async () => {
-    if (!newCategory.trim() || !restaurantId) return;
+    if (!newCategory.trim()) return;
 
     try {
+      const { data: itemData } = await supabase
+        .from("menu_items")
+        .select("restaurant_id")
+        .eq("id", id)
+        .single();
+
+      if (!itemData) throw new Error("Menu item not found");
+
       const { data, error } = await supabase
         .from("menu_categories")
         .insert([
           {
             name: newCategory.trim(),
-            restaurant_id: restaurantId
+            restaurant_id: itemData.restaurant_id
           }
         ])
         .select()
@@ -102,18 +132,18 @@ export default function CreateMenu() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!restaurantId || !selectedCategory) return;
+    if (!selectedCategory || !id) return;
 
     try {
       setIsLoading(true);
-      let imageUrl = null;
+      let imageUrl = menuItem.currentImageUrl;
 
-      // Upload image if exists
+      // Upload new image if exists
       if (menuItem.image) {
         const fileExt = menuItem.image.name.split('.').pop();
         const fileName = `${Date.now()}-${Math.random()}.${fileExt}`;
         
-        const { error: uploadError, data } = await supabase.storage
+        const { error: uploadError } = await supabase.storage
           .from("menu-items")
           .upload(fileName, menuItem.image);
 
@@ -127,21 +157,19 @@ export default function CreateMenu() {
         imageUrl = publicUrl;
       }
 
-      // Create menu item
-      const { error: insertError } = await supabase
+      // Update menu item
+      const { error: updateError } = await supabase
         .from("menu_items")
-        .insert([
-          {
-            name: menuItem.name,
-            description: menuItem.description,
-            price: parseFloat(menuItem.price),
-            category: selectedCategory,
-            restaurant_id: restaurantId,
-            image_url: imageUrl
-          }
-        ]);
+        .update({
+          name: menuItem.name,
+          description: menuItem.description,
+          price: parseFloat(menuItem.price),
+          category: selectedCategory,
+          image_url: imageUrl
+        })
+        .eq("id", id);
 
-      if (insertError) throw insertError;
+      if (updateError) throw updateError;
 
       navigate(-1); // Go back to menu management
     } catch (error: any) {
@@ -165,7 +193,7 @@ export default function CreateMenu() {
         </div>
 
         <div className="bg-white rounded-lg shadow p-6">
-          <h1 className="text-2xl font-semibold text-gray-900 mb-6">Add Menu Item</h1>
+          <h1 className="text-2xl font-semibold text-gray-900 mb-6">Edit Menu Item</h1>
 
           {error && (
             <div className="mb-6 flex items-center space-x-2 text-red-600 bg-red-50 p-4 rounded-lg">
@@ -182,16 +210,21 @@ export default function CreateMenu() {
               </label>
               <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg">
                 <div className="space-y-1 text-center">
-                  {menuItem.imagePreview ? (
+                  {(menuItem.imagePreview || menuItem.currentImageUrl) ? (
                     <div className="relative inline-block">
                       <img
-                        src={menuItem.imagePreview}
+                        src={menuItem.imagePreview || menuItem.currentImageUrl || ""}
                         alt="Preview"
                         className="max-h-48 rounded-lg"
                       />
                       <button
                         type="button"
-                        onClick={() => setMenuItem(prev => ({ ...prev, image: null, imagePreview: null }))}
+                        onClick={() => setMenuItem(prev => ({ 
+                          ...prev, 
+                          image: null, 
+                          imagePreview: null,
+                          currentImageUrl: null 
+                        }))}
                         className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1"
                       >
                         <X className="w-4 h-4" />
@@ -343,7 +376,7 @@ export default function CreateMenu() {
                 {isLoading ? (
                   <div className="w-5 h-5 border-2 border-white rounded-full animate-spin border-t-transparent" />
                 ) : (
-                  'Create Menu Item'
+                  'Save Changes'
                 )}
               </button>
             </div>

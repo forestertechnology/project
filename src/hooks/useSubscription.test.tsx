@@ -27,7 +27,8 @@ describe('useSubscription', () => {
       name: 'Free',
       max_menu_items: 10,
       max_menus: 1,
-      max_categories: 5
+      max_categories: 5,
+      max_restaurants: 1
     });
     expect(result.current.error).toBeNull();
   });
@@ -53,7 +54,8 @@ describe('useSubscription', () => {
       name: 'Premium',
       max_menu_items: 100,
       max_menus: 5,
-      max_categories: 20
+      max_categories: 20,
+      max_restaurants: 3
     });
   });
 
@@ -111,6 +113,8 @@ describe('useSubscription', () => {
       expect(result.current.canAddMenuItem(10)).toBe(false);
       expect(result.current.canAddCategory(4)).toBe(true);
       expect(result.current.canAddCategory(5)).toBe(false);
+      expect(result.current.canAddRestaurant(0)).toBe(true);
+      expect(result.current.canAddRestaurant(1)).toBe(false);
     });
 
     it('should correctly check menu limits for premium tier', async () => {
@@ -136,6 +140,8 @@ describe('useSubscription', () => {
       expect(result.current.canAddMenuItem(100)).toBe(false);
       expect(result.current.canAddCategory(19)).toBe(true);
       expect(result.current.canAddCategory(20)).toBe(false);
+      expect(result.current.canAddRestaurant(2)).toBe(true);
+      expect(result.current.canAddRestaurant(3)).toBe(false);
     });
   });
 
@@ -157,5 +163,6 @@ describe('useSubscription', () => {
     expect(result.current.canAddMenu(0)).toBe(false);
     expect(result.current.canAddMenuItem(0)).toBe(false);
     expect(result.current.canAddCategory(0)).toBe(false);
+    expect(result.current.canAddRestaurant(0)).toBe(false);
   });
 });

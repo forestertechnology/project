@@ -1,0 +1,31 @@
+#!/bin/sh
+# Cross-platform pre-commit hook for database type validation
+. "$(dirname "$0")/_/husky.sh"
+
+# Color codes for terminal output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Validate database types before commit
+echo "${YELLOW}Running database type validation...${NC}"
+
+# Run validation and capture the result
+npm run validate:db-types
+
+# Check the exit status of the validation
+VALIDATION_RESULT=$?
+
+if [ $VALIDATION_RESULT -ne 0 ]; then
+    echo "${RED}❌ Database type validation failed!${NC}"
+    echo "${YELLOW}Please fix the database type inconsistencies before committing.${NC}"
+    echo "${YELLOW}Suggestions:${NC}"
+    echo "  1. Check the database-validation-report.json for details"
+    echo "  2. Ensure your database types match the current schema"
+    echo "  3. Run 'npm run validate:db-types' locally to see full error details"
+    exit 1
+fi
+
+echo "${GREEN}✅ Database type validation successful${NC}"
+exit 0

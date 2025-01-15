@@ -12,7 +12,12 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
-    "test:watch": "vitest watch"
+    "test:watch": "vitest watch",
+    "validate:db-types": "vite-node scripts/validate-db-types.ts",
+    "db:sync": "vite-node scripts/db-types-sync.js",
+    "db:manage": "vite-node scripts/db-management.js",
+    "db:migrate": "vite-node scripts/migrate.js",
+    "prepare": "chmod +x scripts/pre-commit.js && chmod +x scripts/migrate.js && husky install"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.47.12",
@@ -33,11 +38,14 @@
     "@vitejs/plugin-react": "^4.3.1",
     "@vitest/coverage-v8": "^2.1.8",
     "autoprefixer": "^10.4.18",
+    "chalk": "^5.3.0",
     "concurrently": "^9.1.2",
     "eslint": "^9.9.1",
     "eslint-plugin-react-hooks": "^5.1.0-rc.0",
     "eslint-plugin-react-refresh": "^0.4.11",
     "globals": "^15.9.0",
+    "husky": "^9.0.11",
+    "inquirer": "^9.2.16",
     "jsdom": "^26.0.0",
     "msw": "^2.7.0",
     "postcss": "^8.4.35",
@@ -47,6 +55,7 @@
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.3.0",
     "vite": "^5.4.2",
+    "vite-node": "^2.0.0",
     "vitest": "^2.1.8"
   }
 }

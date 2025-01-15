@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { User, Session } from '@supabase/supabase-js';
+import { supabase, forceLogout, initializeSession } from '../lib/supabase';
 
 interface UserProfile {
   id: string;
@@ -11,15 +11,20 @@ interface UserProfile {
   is_admin: boolean;
   created_at: string;
   updated_at: string;
+  role: 'admin' | 'manager' | 'staff' | 'user';
 }
 
 interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
   isLoading: boolean;
+  sessionExpiresAt: number | null;
+  timeUntilExpiration: number;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, profile: Omit<UserProfile, 'id' | 'created_at' | 'updated_at'>) => Promise<{ emailConfirmation: boolean }>;
   signOut: () => Promise<void>;
+  refreshSession: () => Promise<void>;
+  checkSessionExpiration: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -28,36 +33,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    // Initial session check
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setUser(session.user);
-        fetchProfile(session.user.id).catch(console.error);
-      }
-      setIsLoading(false);
-    });
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setIsLoading(true);
-      if (session?.user) {
-        setUser(session.user);
-        try {
-          await fetchProfile(session.user.id);
-        } catch (error) {
-          console.error('Error fetching profile:', error);
-        }
-      } else {
-        setUser(null);
-        setProfile(null);
-      }
-      setIsLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+  const [sessionExpiresAt, setSessionExpiresAt] = useState<number | null>(null);
+  const [timeUntilExpiration, setTimeUntilExpiration] = useState(0);
 
   async function fetchProfile(userId: string) {
     try {
@@ -82,7 +59,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function signIn(email: string, password: string) {
     try {
-      console.log('Attempting to sign in with email:', email);
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -91,14 +67,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) throw error;
       if (!data.user) throw new Error('No user returned from sign in');
 
-      console.log('Sign in successful, user:', data.user);
       setUser(data.user);
-      
-      console.log('Fetching user profile...');
-      const profile = await fetchProfile(data.user.id);
-      if (!profile) throw new Error('No profile found');
-      
-      console.log('Profile fetched successfully:', profile);
+      await fetchProfile(data.user.id);
     } catch (error) {
       console.error('Sign in error:', error);
       setUser(null);
@@ -152,24 +122,117 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function signOut() {
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
+      await forceLogout();
       
       setUser(null);
       setProfile(null);
+      setSessionExpiresAt(null);
     } catch (error) {
       console.error('Error signing out:', error);
       throw error;
     }
   }
 
+  const checkSessionExpiration = useCallback(() => {
+    if (sessionExpiresAt) {
+      const now = Math.floor(Date.now() / 1000);
+      const timeLeft = sessionExpiresAt - now;
+      setTimeUntilExpiration(Math.max(timeLeft, 0));
+
+      if (timeLeft <= 300) { // 5 minutes warning
+        console.warn('Session will expire soon. Refreshing...');
+        refreshSession().catch(console.error);
+      }
+    }
+  }, [sessionExpiresAt]);
+
+  const refreshSession = useCallback(async () => {
+    try {
+      const { data: { session } } = await supabase.auth.refreshSession();
+      if (session) {
+        // Add a more strict check for session validity
+        const currentTime = Math.floor(Date.now() / 1000);
+        if (session.expires_at && session.expires_at < currentTime) {
+          await signOut(); // Force logout if session is truly expired
+          return;
+        }
+        setUser(session.user);
+        setSessionExpiresAt(session.expires_at ?? null);
+      } else {
+        await signOut();
+      }
+    } catch (error) {
+      console.error('Session refresh failed:', error);
+      await signOut();
+    }
+  }, []);
+
+  useEffect(() => {
+    const checkExpirationInterval = setInterval(checkSessionExpiration, 60000); // Check every minute
+    return () => clearInterval(checkExpirationInterval);
+  }, [checkSessionExpiration]);
+
+  useEffect(() => {
+    const initializeAuth = async () => {
+      try {
+        setIsLoading(true);
+        
+        // Use the new initialization method
+        const session = await initializeSession();
+        
+        if (session?.user) {
+          setUser(session.user);
+          setSessionExpiresAt(session.expires_at ?? null);
+          
+          try {
+            await fetchProfile(session.user.id);
+          } catch (profileError) {
+            console.error('Error fetching profile:', profileError);
+          }
+        }
+      } catch (error) {
+        console.error('Initialization error:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        setUser(session.user);
+        setSessionExpiresAt(session.expires_at ?? null);
+        try {
+          await fetchProfile(session.user.id);
+        } catch (error) {
+          console.error('Error fetching profile:', error);
+        }
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setProfile(null);
+        setSessionExpiresAt(null);
+      }
+    });
+
+    // Initial auth check
+    initializeAuth();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
   const value = {
     user,
     profile,
     isLoading,
+    sessionExpiresAt,
+    timeUntilExpiration,
     signIn,
     signUp,
     signOut,
+    refreshSession,
+    checkSessionExpiration
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

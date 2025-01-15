@@ -1,25 +1,102 @@
-import React, { useState } from 'react';
-import { User, Mail, Phone, Lock } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { User, Mail, Phone, Lock, AlertCircle, CheckCircle } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 
 export default function AccountProfile() {
+  const { profile: authProfile, user } = useAuth();
   const [profile, setProfile] = useState({
-    firstName: 'John',
-    lastName: 'Doe',
-    email: 'john.doe@example.com',
-    phone: '+1 (555) 000-0000',
+    firstName: authProfile?.first_name || '',
+    lastName: authProfile?.last_name || '',
+    email: user?.email || '',
+    phone: authProfile?.phone_number || '',
     currentPassword: '',
     newPassword: '',
     confirmPassword: ''
   });
+  const [isLoading, setIsLoading] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+  useEffect(() => {
+    // Update form when auth profile changes
+    if (authProfile && user) {
+      setProfile({
+        firstName: authProfile.first_name || '',
+        lastName: authProfile.last_name || '',
+        email: user.email || '',
+        phone: authProfile.phone_number || '',
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      });
+    }
+  }, [authProfile, user]);
 
   const handleChange = (field: keyof typeof profile, value: string) => {
     setProfile(prev => ({ ...prev, [field]: value }));
+    setMessage(null);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle profile update logic here
-    console.log('Profile update:', profile);
+    setIsLoading(true);
+    setMessage(null);
+
+    try {
+      // Validate password change
+      if (profile.newPassword) {
+        if (profile.newPassword !== profile.confirmPassword) {
+          throw new Error('New passwords do not match');
+        }
+
+        // Reauthenticate user before password change
+        const { error: reauthError } = await supabase.auth.signInWithPassword({
+          email: user?.email || '',
+          password: profile.currentPassword
+        });
+
+        if (reauthError) throw reauthError;
+
+        // Update password
+        const { error: passwordError } = await supabase.auth.updateUser({
+          password: profile.newPassword
+        });
+
+        if (passwordError) throw passwordError;
+      }
+
+      // Update profile information
+      const { error: profileError } = await supabase
+        .from('user_profiles')
+        .update({
+          first_name: profile.firstName,
+          last_name: profile.lastName,
+          phone_number: profile.phone
+        })
+        .eq('id', authProfile?.id);
+
+      if (profileError) throw profileError;
+
+      // Reset password fields and show success message
+      setProfile(prev => ({
+        ...prev,
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      }));
+
+      setMessage({
+        type: 'success', 
+        text: 'Profile updated successfully!'
+      });
+    } catch (error: any) {
+      setMessage({
+        type: 'error', 
+        text: error.message || 'Failed to update profile'
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -28,6 +105,20 @@ export default function AccountProfile() {
         <User className="w-6 h-6 text-orange-500" />
         <h2 className="text-xl font-semibold text-gray-900">Account Profile</h2>
       </div>
+
+      {message && (
+        <div className={`
+          flex items-center space-x-2 p-4 rounded-lg mb-4
+          ${message.type === 'success' 
+            ? 'bg-green-50 text-green-800' 
+            : 'bg-red-50 text-red-800'}
+        `}>
+          {message.type === 'success' 
+            ? <CheckCircle className="w-5 h-5 text-green-600" /> 
+            : <AlertCircle className="w-5 h-5 text-red-600" />}
+          <p>{message.text}</p>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Personal Information */}
@@ -45,6 +136,7 @@ export default function AccountProfile() {
                 value={profile.firstName}
                 onChange={(e) => handleChange('firstName', e.target.value)}
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
+                required
               />
             </div>
 
@@ -58,6 +150,7 @@ export default function AccountProfile() {
                 value={profile.lastName}
                 onChange={(e) => handleChange('lastName', e.target.value)}
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
+                required
               />
             </div>
           </div>
@@ -74,8 +167,8 @@ export default function AccountProfile() {
                 type="email"
                 id="email"
                 value={profile.email}
-                onChange={(e) => handleChange('email', e.target.value)}
-                className="block w-full pl-10 rounded-md border-gray-300 focus:border-orange-500 focus:ring-orange-500"
+                disabled
+                className="block w-full pl-10 rounded-md border-gray-300 bg-gray-100 cursor-not-allowed"
               />
             </div>
           </div>
@@ -117,6 +210,7 @@ export default function AccountProfile() {
                 value={profile.currentPassword}
                 onChange={(e) => handleChange('currentPassword', e.target.value)}
                 className="block w-full pl-10 rounded-md border-gray-300 focus:border-orange-500 focus:ring-orange-500"
+                placeholder="Enter current password to change password"
               />
             </div>
           </div>
@@ -135,6 +229,8 @@ export default function AccountProfile() {
                 value={profile.newPassword}
                 onChange={(e) => handleChange('newPassword', e.target.value)}
                 className="block w-full pl-10 rounded-md border-gray-300 focus:border-orange-500 focus:ring-orange-500"
+                placeholder="Enter new password"
+                minLength={6}
               />
             </div>
           </div>
@@ -153,6 +249,8 @@ export default function AccountProfile() {
                 value={profile.confirmPassword}
                 onChange={(e) => handleChange('confirmPassword', e.target.value)}
                 className="block w-full pl-10 rounded-md border-gray-300 focus:border-orange-500 focus:ring-orange-500"
+                placeholder="Confirm new password"
+                minLength={6}
               />
             </div>
           </div>
@@ -161,9 +259,19 @@ export default function AccountProfile() {
         <div className="flex justify-end">
           <button
             type="submit"
-            className="bg-orange-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-orange-600 transition-colors"
+            disabled={isLoading}
+            className={`
+              flex items-center justify-center px-4 py-2 rounded-lg font-semibold transition-colors
+              ${isLoading 
+                ? 'bg-orange-300 text-white cursor-not-allowed' 
+                : 'bg-orange-500 text-white hover:bg-orange-600'}
+            `}
           >
-            Save Changes
+            {isLoading ? (
+              <div className="w-5 h-5 border-2 border-white rounded-full animate-spin border-t-transparent" />
+            ) : (
+              'Save Changes'
+            )}
           </button>
         </div>
       </form>

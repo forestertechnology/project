@@ -1,0 +1,68 @@
+{
+  "project_id": "qrmenu-saas",
+  "migration_tracking": {
+    "enabled": true,
+    "table_name": "schema_migrations",
+    "schema": "public"
+  },
+  "migration_policies": {
+    "naming_convention": {
+      "prefix": "timestamp",
+      "format": "YYYYMMDDHHMMSS"
+    },
+    "allowed_operations": [
+      "CREATE TABLE",
+      "ALTER TABLE",
+      "CREATE INDEX",
+      "CREATE POLICY",
+      "CREATE FUNCTION",
+      "CREATE TRIGGER"
+    ],
+    "forbidden_operations": [
+      "DROP TABLE",
+      "DROP COLUMN",
+      "TRUNCATE"
+    ]
+  },
+  "type_generation": {
+    "output_path": "../src/lib/database.types.ts",
+    "generate_on_migration": true
+  },
+  "validation_rules": {
+    "max_migration_size_kb": 500,
+    "max_migrations_per_release": 10,
+    "require_description": true,
+    "enforce_referential_integrity": true
+  },
+  "backup_strategy": {
+    "automatic_backup": true,
+    "backup_retention_days": 30
+  },
+  "environments": {
+    "development": {
+      "migration_path": "./dev",
+      "allow_destructive_changes": true
+    },
+    "staging": {
+      "migration_path": "./staging",
+      "allow_destructive_changes": false
+    },
+    "production": {
+      "migration_path": "./prod",
+      "allow_destructive_changes": false,
+      "require_review": true
+    }
+  },
+  "hooks": {
+    "pre_migration": [
+      "npm run validate:db-types"
+    ],
+    "post_migration": [
+      "npm run db:sync"
+    ]
+  },
+  "documentation": {
+    "generate_changelog": true,
+    "changelog_path": "../CHANGELOG.md"
+  }
+}

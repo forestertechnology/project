@@ -57,7 +57,11 @@ DO $$ BEGIN
   END IF;
 END $$;
 
--- Update existing subscription tiers
+-- Update existing subscription tiers with different limits
 UPDATE subscription_tiers
 SET max_restaurants = 1
-WHERE name IN ('Free', 'Advanced');
+WHERE name = 'Free';
+
+UPDATE subscription_tiers
+SET max_restaurants = 3
+WHERE name = 'Advanced';
